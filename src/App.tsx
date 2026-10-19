@@ -1,121 +1,174 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useState, useEffect } from 'react'
+import { Navbar } from './components/Navbar'
+import { Dashboard } from './components/Dashboard'
+import { MedicationList } from './components/MedicationList'
+import { InteractionChecker } from './components/InteractionChecker'
+import { VitalsTracker } from './components/VitalsTracker'
+import { AddMedicationModal } from './components/AddMedicationModal'
+import { INITIAL_MEDICATIONS } from './data/initialMedications'
+import type { Medication } from './types/medication'
+import './index.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+export function App() {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'medications' | 'interactions' | 'vitals'>('dashboard')
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    const saved = localStorage.getItem('medtrack_theme')
+    return saved ? saved === 'dark' : true
+  })
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+
+  const [medications, setMedications] = useState<Medication[]>(() => {
+    const saved = localStorage.getItem('medtrack_medications')
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch {
+        // fallback
+      }
+    }
+    return INITIAL_MEDICATIONS
+  })
+
+  // Sync theme
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('medtrack_theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('medtrack_theme', 'light')
+    }
+  }, [isDark])
+
+  // Save medications to local storage
+  const saveMedications = (newMeds: Medication[]) => {
+    setMedications(newMeds)
+    localStorage.setItem('medtrack_medications', JSON.stringify(newMeds))
+  }
+
+  // Toggle dose taken status
+  const handleToggleTaken = (medId: string, timeSlot: string) => {
+    const updated = medications.map((med) => {
+      if (med.id !== medId) return med
+      const current = !!med.takenToday[timeSlot]
+      const nextState = !current
+
+      // Adjust remaining pills
+      let remaining = med.pillsRemaining
+      if (nextState) {
+        remaining = Math.max(0, remaining - 1)
+      } else {
+        remaining = Math.min(med.totalPills, remaining + 1)
+      }
+
+      return {
+        ...med,
+        pillsRemaining: remaining,
+        takenToday: {
+          ...med.takenToday,
+          [timeSlot]: nextState,
+        },
+      }
+    })
+    saveMedications(updated)
+  }
+
+  // Refill medication
+  const handleRefill = (medId: string, amount: number = 30) => {
+    const updated = medications.map((med) => {
+      if (med.id !== medId) return med
+      return {
+        ...med,
+        pillsRemaining: Math.min(med.totalPills + amount, med.pillsRemaining + amount),
+      }
+    })
+    saveMedications(updated)
+  }
+
+  // Delete medication
+  const handleDeleteMedication = (id: string) => {
+    if (window.confirm('Are you sure you want to remove this prescription?')) {
+      const updated = medications.filter((m) => m.id !== id)
+      saveMedications(updated)
+    }
+  }
+
+  // Add new medication
+  const handleAddMedication = (newMed: Medication) => {
+    const updated = [newMed, ...medications]
+    saveMedications(updated)
+  }
+
+  const lowStockCount = medications.filter((m) => m.pillsRemaining <= 7).length
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app-layout">
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        isDark={isDark}
+        setIsDark={setIsDark}
+        onOpenAddModal={() => setIsAddModalOpen(true)}
+        lowStockCount={lowStockCount}
+      />
 
-      <div className="ticks"></div>
+      <main className="main-content-area">
+        {activeTab === 'dashboard' && (
+          <Dashboard
+            medications={medications}
+            onToggleTaken={handleToggleTaken}
+            onQuickRefill={(id) => handleRefill(id, 30)}
+            onNavigateToMedications={() => setActiveTab('medications')}
+            onNavigateToSafety={() => setActiveTab('interactions')}
+          />
+        )}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        {activeTab === 'medications' && (
+          <MedicationList
+            medications={medications}
+            onDeleteMedication={handleDeleteMedication}
+            onRefillMedication={handleRefill}
+            onOpenAddModal={() => setIsAddModalOpen(true)}
+          />
+        )}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        {activeTab === 'interactions' && (
+          <InteractionChecker medications={medications} />
+        )}
+
+        {activeTab === 'vitals' && <VitalsTracker />}
+      </main>
+
+      {/* Add Medication Dialog Modal */}
+      <AddMedicationModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onAdd={handleAddMedication}
+      />
+
+      {/* App Footer */}
+      <footer className="app-footer">
+        <div className="footer-inner">
+          <div className="footer-left">
+            <span className="footer-brand">MEDTRACK</span>
+            <span className="footer-desc">
+              Clinical Drug Safety & Medication Adherence Intelligence Platform
+            </span>
+          </div>
+          <div className="footer-right">
+            <span>Designed for Pharmaceutical Sciences & Healthcare Technology</span>
+            <a
+              href="https://github.com/infosagardiptalukdar-a11y/MEDTRACK"
+              target="_blank"
+              rel="noreferrer"
+              className="footer-link"
+            >
+              GitHub Repository
+            </a>
+          </div>
+        </div>
+      </footer>
+    </div>
   )
 }
 
